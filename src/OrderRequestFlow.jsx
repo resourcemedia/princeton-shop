@@ -113,7 +113,7 @@ export default function OrderRequestFlow() {
     setSubmitting(true);
     setSubmitError(null);
     const { data, error } = await submitOrder(payload);
-    if (error || data?.ok === false) {
+    if (error || !data?.ok) {
       setSubmitError("Something went wrong sending your request — please try again.");
       setSubmitting(false);
       return;
@@ -196,10 +196,6 @@ export default function OrderRequestFlow() {
             <p className="text-slate-600 max-w-md mx-auto">
               An expert from Princeton Analytical Labs will follow up within one business day to confirm your order and process payment.
             </p>
-            <div className="mt-5 text-left max-w-sm mx-auto bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-600">
-              <div className="font-semibold text-slate-500 mb-1">What we emailed the lab:</div>
-              <pre className="overflow-auto max-h-48">{JSON.stringify(payload, null, 2)}</pre>
-            </div>
             <button onClick={() => { setEntry(entry); }} className="mt-5 text-sm font-medium" style={{ color: CYAN }}>
               ← Start over
             </button>
