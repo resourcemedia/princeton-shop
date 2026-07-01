@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { Plus, Minus, Trash2, Check, ChevronLeft, ChevronRight, FlaskConical, Truck, PackageCheck, MapPin } from "lucide-react";
+import { getProducts } from "./supabase";
 
 /*
   Princeton Analytical Labs — Order Request flow (pseudo-cart, no payment)
@@ -18,14 +19,7 @@ import { Plus, Minus, Trash2, Check, ChevronLeft, ChevronRight, FlaskConical, Tr
 const NAVY = "#15428b";
 const CYAN = "#2ba6e0";
 
-const CATALOG = [
-  { id: "ww1", name: "Level 1 (Basic) Well Water", price: 220, group: "Packages", blurb: "Core panel: coliform, nitrates, pH, hardness." },
-  { id: "ww2", name: "Level 2 Well Water", price: 280, group: "Packages", blurb: "Adds metals and additional inorganics." },
-  { id: "ww3", name: "Level 3 Well Water", price: 325, group: "Packages", blurb: "Expanded panel with VOC screening." },
-  { id: "ww4", name: "Level 4 Well Water", price: 345, group: "Packages", blurb: "Comprehensive evaluation, full suite." },
-  // Individual tests removed for now — client considering packages only.
-  // (Re-add here with group "Individual Tests" to bring them back.)
-];
+// CATALOG is now fetched from Supabase — see products state below.
 
 // Entry-point presets: which products show, and what's pre-loaded.
 // Packages-only for now. Realtor/FHA path is parked — it relied on individual
@@ -53,6 +47,20 @@ export default function OrderRequestFlow() {
   const [zip, setZip] = useState("");
   const [info, setInfo] = useState({ name: "", email: "", phone: "", address: "", notes: "" });
   const [submitted, setSubmitted] = useState(false);
+  const [catalog, setCatalog] = useState([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState(null);
+
+  useEffect(() => {
+    getProducts().then(({ data, error }) => {
+      if (error) {
+        setCatalogError("Could not load products. Please refresh or try again later.");
+      } else {
+        setCatalog(data);
+      }
+      setCatalogLoading(false);
+    });
+  }, []);
 
   // Reset cart to the entry-point preset whenever the simulated source changes.
   useEffect(() => {
@@ -63,12 +71,12 @@ export default function OrderRequestFlow() {
 
   const visible = useMemo(() => {
     const show = ENTRY[entry].show;
-    return show ? CATALOG.filter((p) => show.includes(p.id)) : CATALOG;
-  }, [entry]);
+    return show ? catalog.filter((p) => show.includes(p.id)) : catalog;
+  }, [entry, catalog]);
 
   const lines = useMemo(
-    () => CATALOG.filter((p) => qty[p.id] > 0).map((p) => ({ ...p, count: qty[p.id], subtotal: p.price * qty[p.id] })),
-    [qty]
+    () => catalog.filter((p) => qty[p.id] > 0).map((p) => ({ ...p, count: qty[p.id], subtotal: p.price * qty[p.id] })),
+    [qty, catalog]
   );
   const kitsTotal = lines.reduce((s, l) => s + l.subtotal, 0);
   const itemCount = lines.reduce((s, l) => s + l.count, 0);
@@ -97,7 +105,10 @@ export default function OrderRequestFlow() {
     submittedAt: new Date().toISOString(),
   };
 
-  const groups = ["Packages"];
+  const groups = useMemo(
+    () => [...new Set(catalog.map((p) => p.group))],
+    [catalog]
+  );
 
   return (
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif" }} className="min-h-screen bg-slate-50 text-slate-800">
@@ -182,7 +193,13 @@ export default function OrderRequestFlow() {
             {/* ===== Step 1: Kits ===== */}
             {step === 1 && (
               <Section n={1} title="Water Test Kits">
-                {groups.map((g) => {
+                {catalogLoading && (
+                  <p className="text-sm text-slate-400 py-4 text-center">Loading products…</p>
+                )}
+                {catalogError && (
+                  <p className="text-sm text-rose-500 py-4 text-center">{catalogError}</p>
+                )}
+                {!catalogLoading && !catalogError && groups.map((g) => {
                   const items = visible.filter((p) => p.group === g);
                   if (!items.length) return null;
                   return (
