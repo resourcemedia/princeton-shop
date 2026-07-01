@@ -2,6 +2,7 @@ import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { CartProvider } from "./CartContext.jsx";
 import Shop from "./Shop.jsx";
+import Quiz from "./Quiz.jsx";
 import OrderRequestFlow from "./OrderRequestFlow.jsx";
 
 export default function App() {
@@ -11,6 +12,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/shop" replace />} />
           <Route path="/shop" element={<Shop />} />
+          <Route path="/quiz" element={<Quiz />} />
           <Route path="/order" element={<OrderRequestFlow />} />
         </Routes>
       </CartProvider>
