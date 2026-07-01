@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Plus, Minus, Trash2, Check, ChevronLeft, ChevronRight, FlaskConical, Truck, PackageCheck, MapPin } from "lucide-react";
 import { getProducts, submitOrder } from "./supabase";
 
@@ -9,9 +10,9 @@ import { getProducts, submitOrder } from "./supabase";
   NOTES FOR BUILD:
   - Delivery prices are PLACEHOLDERS, flagged in the UI. Courier model
     (local sample pickup, zip-priced) pending client clarification.
-  - The "Arriving from" control simulates entry-point filtering. In production
-    this comes from a URL param (e.g. /order?from=quiz) — the flow is identical,
-    only the starting catalog/cart changes.
+  - Entry-point filtering comes from URL params: /order?from=wellness picks an
+    ENTRY preset, /order?preload=<slug> pre-loads one product at qty 1 (used
+    by the Shop page's "Order" buttons).
   - On submit, the `payload` object is what a form service / serverless
     function would email to the lab. No payment is processed anywhere.
 */
@@ -40,7 +41,12 @@ const fmt = (n) => `$${n.toFixed(2)}`;
 const STEPS = ["Water Test Kits", "Delivery", "Your Details", "Order Summary"];
 
 export default function OrderRequestFlow() {
-  const [entry, setEntry] = useState("shop");
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const fromParam = searchParams.get("from");
+  const preloadParam = searchParams.get("preload");
+  const entry = fromParam && ENTRY[fromParam] ? fromParam : "shop";
+
   const [step, setStep] = useState(1);
   const [qty, setQty] = useState({});
   const [delivery, setDelivery] = useState("courier");
@@ -64,14 +70,17 @@ export default function OrderRequestFlow() {
     });
   }, []);
 
-  // Reset cart to the entry-point preset whenever the simulated source changes.
-  useEffect(() => {
-    setQty({ ...ENTRY[entry].preload });
+  // Reset cart to the entry-point preset (plus any ?preload= slug) whenever the URL params change.
+  const resetOrder = () => {
+    const preset = ENTRY[entry].preload;
+    setQty(preloadParam ? { ...preset, [preloadParam]: 1 } : { ...preset });
     setStep(1);
     setSubmitted(false);
     setSubmitting(false);
     setSubmitError(null);
-  }, [entry]);
+  };
+
+  useEffect(resetOrder, [entry, preloadParam]);
 
   const visible = useMemo(() => {
     const show = ENTRY[entry].show;
@@ -128,19 +137,6 @@ export default function OrderRequestFlow() {
 
   return (
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif" }} className="min-h-screen bg-slate-50 text-slate-800">
-      {/* Demo control — not part of the real page */}
-      <div className="bg-slate-900 text-slate-300 text-xs">
-        <div className="max-w-3xl mx-auto px-5 py-2 flex flex-wrap items-center gap-2">
-          <span className="text-slate-500">Demo · arriving from:</span>
-          {Object.entries(ENTRY).map(([k, v]) => (
-            <button key={k} onClick={() => setEntry(k)}
-              className={`px-2.5 py-1 rounded-full transition-colors ${entry === k ? "bg-sky-500 text-white" : "hover:bg-slate-800"}`}>
-              {v.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       <div className="max-w-3xl mx-auto px-5 py-8">
         {/* Title */}
         <div className="flex items-center gap-3 mb-1">
@@ -196,7 +192,7 @@ export default function OrderRequestFlow() {
             <p className="text-slate-600 max-w-md mx-auto">
               An expert from Princeton Analytical Labs will follow up within one business day to confirm your order and process payment.
             </p>
-            <button onClick={() => { setEntry(entry); }} className="mt-5 text-sm font-medium" style={{ color: CYAN }}>
+            <button onClick={resetOrder} className="mt-5 text-sm font-medium" style={{ color: CYAN }}>
               ← Start over
             </button>
           </div>
@@ -248,7 +244,7 @@ export default function OrderRequestFlow() {
                 })}
                 <Nav
                   leftLabel="Continue Shopping" leftIcon={ChevronLeft}
-                  onLeft={() => {}} canNext={canNext} onNext={() => setStep(2)}
+                  onLeft={() => navigate("/shop")} canNext={canNext} onNext={() => setStep(2)}
                   hint={lines.length === 0 ? "Add at least one test to continue" : `${itemCount} item${itemCount !== 1 ? "s" : ""} · ${fmt(kitsTotal)}`}
                 />
               </Section>
