@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { FlaskConical, ShieldCheck } from "lucide-react";
 import { getProducts } from "./supabase";
-import CartButton from "./CartButton.jsx";
 
 const NAVY = "#15428b";
 const CYAN = "#2ba6e0";
@@ -30,17 +29,14 @@ export default function Wellness() {
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif" }} className="min-h-screen bg-slate-50 text-slate-800">
       <div className="max-w-2xl mx-auto px-5 py-8">
         {/* Title */}
-        <div className="flex items-start justify-between gap-3 mb-1">
-          <div className="flex items-center gap-3">
-            <div className="grid place-items-center w-9 h-9 rounded-full text-white" style={{ background: CYAN }}>
-              <ShieldCheck size={18} />
-            </div>
-            <div>
-              <div className="text-[11px] tracking-[0.22em] font-semibold" style={{ color: NAVY }}>PRINCETON ANALYTICAL LABS</div>
-              <h1 className="text-3xl font-bold leading-tight" style={{ color: NAVY }}>Water Wellness</h1>
-            </div>
+        <div className="flex items-center gap-3 mb-1">
+          <div className="grid place-items-center w-9 h-9 rounded-full text-white" style={{ background: CYAN }}>
+            <ShieldCheck size={18} />
           </div>
-          <CartButton />
+          <div>
+            <div className="text-[11px] tracking-[0.22em] font-semibold" style={{ color: NAVY }}>PRINCETON ANALYTICAL LABS</div>
+            <h1 className="text-3xl font-bold leading-tight" style={{ color: NAVY }}>Water Wellness</h1>
+          </div>
         </div>
         <p className="text-sm text-slate-500 mb-6 ml-12 max-w-xl">Ensure your water is safe.</p>
 

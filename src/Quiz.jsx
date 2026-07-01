@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FlaskConical } from "lucide-react";
 import { getSymptoms, getSymptomAnalytes, getComparisonMatrix, getProducts } from "./supabase";
-import CartButton from "./CartButton.jsx";
 
 /*
   PENDING Dr. Coyer's review: the symptom → analyte mappings (symptom_analytes
@@ -131,17 +130,14 @@ export default function Quiz() {
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif" }} className="min-h-screen bg-slate-50 text-slate-800">
       <div className="max-w-3xl mx-auto px-5 py-8">
         {/* Title */}
-        <div className="flex items-start justify-between gap-3 mb-1">
-          <div className="flex items-center gap-3">
-            <div className="grid place-items-center w-9 h-9 rounded-full text-white" style={{ background: CYAN }}>
-              <FlaskConical size={18} />
-            </div>
-            <div>
-              <div className="text-[11px] tracking-[0.22em] font-semibold" style={{ color: NAVY }}>PRINCETON ANALYTICAL LABS</div>
-              <h1 className="text-3xl font-bold leading-tight" style={{ color: NAVY }}>Water Quiz</h1>
-            </div>
+        <div className="flex items-center gap-3 mb-1">
+          <div className="grid place-items-center w-9 h-9 rounded-full text-white" style={{ background: CYAN }}>
+            <FlaskConical size={18} />
           </div>
-          <CartButton />
+          <div>
+            <div className="text-[11px] tracking-[0.22em] font-semibold" style={{ color: NAVY }}>PRINCETON ANALYTICAL LABS</div>
+            <h1 className="text-3xl font-bold leading-tight" style={{ color: NAVY }}>Water Quiz</h1>
+          </div>
         </div>
         <p className="text-sm text-slate-500 mb-6 ml-12 max-w-xl">
           Select your water issue symptoms to determine the proper test kit.
