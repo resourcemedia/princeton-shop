@@ -1,7 +1,8 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Plus, Minus, Trash2, Check, ChevronLeft, ChevronRight, FlaskConical, Truck, PackageCheck, MapPin } from "lucide-react";
+import { Plus, Minus, Trash2, Check, ChevronLeft, ChevronRight, FlaskConical, Truck, PackageCheck, MapPin, ShoppingCart } from "lucide-react";
 import { getProducts, submitOrder } from "./supabase";
+import { useCart } from "./CartContext.jsx";
 
 /*
   Princeton Analytical Labs — Order Request flow (pseudo-cart, no payment)
@@ -10,9 +11,12 @@ import { getProducts, submitOrder } from "./supabase";
   NOTES FOR BUILD:
   - Delivery prices are PLACEHOLDERS, flagged in the UI. Courier model
     (local sample pickup, zip-priced) pending client clarification.
-  - Entry-point filtering comes from URL params: /order?from=wellness picks an
-    ENTRY preset, /order?preload=<slug> pre-loads one product at qty 1 (used
-    by the Shop page's "Order" buttons).
+  - Cart state lives in CartContext, shared with the Shop page, so it
+    survives navigation between /shop and /order.
+  - URL params drive two different behaviors on mount: /order?preload=<slug>
+    (from the Shop page's "Order" buttons) ADDS that item to the cart;
+    /order?from=wellness picks an ENTRY preset that only applies if the cart
+    is currently empty, so it never clobbers an in-progress cart.
   - On submit, the `payload` object is what a form service / serverless
     function would email to the lab. No payment is processed anywhere.
 */
@@ -22,13 +26,12 @@ const CYAN = "#2ba6e0";
 
 // CATALOG is now fetched from Supabase — see products state below.
 
-// Entry-point presets: which products show, and what's pre-loaded.
-// Packages-only for now. Realtor/FHA path is parked — it relied on individual
-// tests (Coliform/Nitrate/Lead); restore it when those return.
+// Entry-point presets: what's pre-loaded (only applied when the cart is
+// empty — see CartContext#setIfEmpty). Packages-only for now.
 const ENTRY = {
-  shop:     { label: "Shop (all)", show: null,                         preload: {} },
-  quiz:     { label: "Water Quiz", show: null,                         preload: { ww2: 1 } },
-  wellness: { label: "Wellness",   show: ["ww1", "ww2", "ww3", "ww4"], preload: {} },
+  shop:     { preload: {} },
+  quiz:     { preload: { ww2: 1 } },
+  wellness: { preload: {} },
 };
 
 const DELIVERY = [
@@ -46,9 +49,9 @@ export default function OrderRequestFlow() {
   const fromParam = searchParams.get("from");
   const preloadParam = searchParams.get("preload");
   const entry = fromParam && ENTRY[fromParam] ? fromParam : "shop";
+  const cart = useCart();
 
   const [step, setStep] = useState(1);
-  const [qty, setQty] = useState({});
   const [delivery, setDelivery] = useState("courier");
   const [zip, setZip] = useState("");
   const [info, setInfo] = useState({ name: "", email: "", phone: "", address: "", notes: "" });
@@ -70,35 +73,45 @@ export default function OrderRequestFlow() {
     });
   }, []);
 
-  // Reset cart to the entry-point preset (plus any ?preload= slug) whenever the URL params change.
-  const resetOrder = () => {
-    const preset = ENTRY[entry].preload;
-    setQty(preloadParam ? { ...preset, [preloadParam]: 1 } : { ...preset });
+  // Apply the URL-driven cart action exactly once per navigation to this page
+  // (guarded against React StrictMode's synthetic double-invoke of effects).
+  const paramsKey = `${fromParam || ""}|${preloadParam || ""}`;
+  const processedKey = useRef(null);
+  useEffect(() => {
     setStep(1);
     setSubmitted(false);
     setSubmitting(false);
     setSubmitError(null);
+
+    if (processedKey.current === paramsKey) return;
+    processedKey.current = paramsKey;
+
+    if (preloadParam) {
+      // Shop "Order" button — always additive.
+      cart.add(preloadParam);
+    } else if (fromParam && ENTRY[fromParam]) {
+      // Entry-point preset — only takes effect on a genuinely empty cart.
+      cart.setIfEmpty(ENTRY[fromParam].preload);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paramsKey]);
+
+  const handleStartOver = () => {
+    cart.clear();
+    navigate("/shop");
   };
 
-  useEffect(resetOrder, [entry, preloadParam]);
-
-  const visible = useMemo(() => {
-    const show = ENTRY[entry].show;
-    return show ? catalog.filter((p) => show.includes(p.id)) : catalog;
-  }, [entry, catalog]);
-
   const lines = useMemo(
-    () => catalog.filter((p) => qty[p.id] > 0).map((p) => ({ ...p, count: qty[p.id], subtotal: p.price * qty[p.id] })),
-    [qty, catalog]
+    () => catalog.filter((p) => cart.qty[p.id] > 0).map((p) => ({ ...p, count: cart.qty[p.id], subtotal: p.price * cart.qty[p.id] })),
+    [cart.qty, catalog]
   );
   const kitsTotal = lines.reduce((s, l) => s + l.subtotal, 0);
   const itemCount = lines.reduce((s, l) => s + l.count, 0);
   const deliveryObj = DELIVERY.find((d) => d.id === delivery);
   const deliveryFee = deliveryObj ? deliveryObj.price : 0;
   const grandTotal = kitsTotal + deliveryFee;
+  const cartEmpty = !catalogLoading && !catalogError && lines.length === 0;
 
-  const bump = (id, d) => setQty((q) => ({ ...q, [id]: Math.max(0, (q[id] || 0) + d) }));
-  const addOne = (id) => setQty((q) => ({ ...q, [id]: (q[id] || 0) + 1 })); // arrives at 1
   const validDetails = info.name.trim() && /\S+@\S+\.\S+/.test(info.email);
   const courierZipOk = delivery !== "courier" || /^\d{5}$/.test(zip);
 
@@ -130,11 +143,6 @@ export default function OrderRequestFlow() {
     setSubmitted(true);
   };
 
-  const groups = useMemo(
-    () => [...new Set(catalog.map((p) => p.group))],
-    [catalog]
-  );
-
   return (
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif" }} className="min-h-screen bg-slate-50 text-slate-800">
       <div className="max-w-3xl mx-auto px-5 py-8">
@@ -153,34 +161,36 @@ export default function OrderRequestFlow() {
         </p>
 
         {/* Stepper */}
-        <div className="flex items-center mb-6">
-          {STEPS.map((label, i) => {
-            const n = i + 1;
-            const done = n < step || submitted;
-            const active = n === step && !submitted;
-            return (
-              <React.Fragment key={label}>
-                <button
-                  onClick={() => !submitted && n < step && setStep(n)}
-                  className="flex items-center gap-2 group"
-                  disabled={submitted || n >= step}
-                >
-                  <span
-                    className="grid place-items-center w-7 h-7 rounded-full text-sm font-semibold transition-colors"
-                    style={{
-                      background: done ? CYAN : active ? NAVY : "#e2e8f0",
-                      color: done || active ? "#fff" : "#64748b",
-                    }}
+        {!(cartEmpty && step === 1) && (
+          <div className="flex items-center mb-6">
+            {STEPS.map((label, i) => {
+              const n = i + 1;
+              const done = n < step || submitted;
+              const active = n === step && !submitted;
+              return (
+                <React.Fragment key={label}>
+                  <button
+                    onClick={() => !submitted && n < step && setStep(n)}
+                    className="flex items-center gap-2 group"
+                    disabled={submitted || n >= step}
                   >
-                    {done ? <Check size={15} /> : n}
-                  </span>
-                  <span className={`text-sm hidden sm:inline ${active ? "font-semibold text-slate-900" : "text-slate-400"}`}>{label}</span>
-                </button>
-                {n < STEPS.length && <div className="flex-1 h-px bg-slate-200 mx-2" />}
-              </React.Fragment>
-            );
-          })}
-        </div>
+                    <span
+                      className="grid place-items-center w-7 h-7 rounded-full text-sm font-semibold transition-colors"
+                      style={{
+                        background: done ? CYAN : active ? NAVY : "#e2e8f0",
+                        color: done || active ? "#fff" : "#64748b",
+                      }}
+                    >
+                      {done ? <Check size={15} /> : n}
+                    </span>
+                    <span className={`text-sm hidden sm:inline ${active ? "font-semibold text-slate-900" : "text-slate-400"}`}>{label}</span>
+                  </button>
+                  {n < STEPS.length && <div className="flex-1 h-px bg-slate-200 mx-2" />}
+                </React.Fragment>
+              );
+            })}
+          </div>
+        )}
 
         {/* ===== Confirmation ===== */}
         {submitted ? (
@@ -192,8 +202,23 @@ export default function OrderRequestFlow() {
             <p className="text-slate-600 max-w-md mx-auto">
               An expert from Princeton Analytical Labs will follow up within one business day to confirm your order and process payment.
             </p>
-            <button onClick={resetOrder} className="mt-5 text-sm font-medium" style={{ color: CYAN }}>
+            <button onClick={handleStartOver} className="mt-5 text-sm font-medium" style={{ color: CYAN }}>
               ← Start over
+            </button>
+          </div>
+        ) : step === 1 && cartEmpty ? (
+          <div className="bg-white border border-slate-200 rounded-xl p-8 text-center">
+            <div className="grid place-items-center w-12 h-12 rounded-full mx-auto mb-3" style={{ background: "#eff6ff" }}>
+              <ShoppingCart size={22} style={{ color: CYAN }} />
+            </div>
+            <h2 className="text-xl font-bold mb-2" style={{ color: NAVY }}>Your cart is empty</h2>
+            <p className="text-slate-500 max-w-sm mx-auto mb-5">
+              Add a water test package to get started with your order request.
+            </p>
+            <button onClick={() => navigate("/shop")}
+              className="inline-flex items-center gap-1 rounded-lg text-white px-5 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90"
+              style={{ background: CYAN }}>
+              Browse tests
             </button>
           </div>
         ) : (
@@ -207,41 +232,28 @@ export default function OrderRequestFlow() {
                 {catalogError && (
                   <p className="text-sm text-rose-500 py-4 text-center">{catalogError}</p>
                 )}
-                {!catalogLoading && !catalogError && groups.map((g) => {
-                  const items = visible.filter((p) => p.group === g);
-                  if (!items.length) return null;
-                  return (
-                    <div key={g} className="mb-4 last:mb-0">
-                      {groups.length > 1 && <div className="text-xs font-semibold tracking-wider text-slate-400 uppercase mb-2">{g}</div>}
-                      <div className="space-y-2">
-                        {items.map((p) => {
-                          const c = qty[p.id] || 0;
-                          return (
-                            <div key={p.id} className="flex items-center gap-3 border border-slate-200 rounded-lg p-3">
-                              <div className="flex-1 min-w-0">
-                                <div className="font-semibold text-slate-900 text-sm">{p.name}</div>
-                                <div className="text-xs text-slate-500 truncate">{p.blurb}</div>
-                              </div>
-                              <div className="font-bold tabular-nums text-sm" style={{ color: NAVY }}>{fmt(p.price)}</div>
-                              {c > 0 ? (
-                                <div className="flex items-center gap-1">
-                                  <IconBtn onClick={() => bump(p.id, -1)} aria={`Remove one ${p.name}`}><Minus size={14} /></IconBtn>
-                                  <span className="w-6 text-center font-semibold tabular-nums text-sm">{c}</span>
-                                  <IconBtn onClick={() => bump(p.id, 1)} aria={`Add one ${p.name}`} solid><Plus size={14} /></IconBtn>
-                                </div>
-                              ) : (
-                                <button onClick={() => addOne(p.id)}
-                                  className="text-xs font-semibold text-white px-3 py-1.5 rounded-md" style={{ background: CYAN }}>
-                                  Add
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })}
+                {!catalogLoading && !catalogError && (
+                  <div className="space-y-2">
+                    {lines.map((l) => (
+                      <div key={l.id} className="flex items-center gap-3 border border-slate-200 rounded-lg p-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-slate-900 text-sm">{l.name}</div>
+                          <div className="text-xs text-slate-500 truncate">{l.blurb}</div>
+                        </div>
+                        <div className="font-bold tabular-nums text-sm" style={{ color: NAVY }}>{fmt(l.subtotal)}</div>
+                        <div className="flex items-center gap-1">
+                          <IconBtn onClick={() => cart.bump(l.id, -1)} aria={`Remove one ${l.name}`}><Minus size={14} /></IconBtn>
+                          <span className="w-6 text-center font-semibold tabular-nums text-sm">{l.count}</span>
+                          <IconBtn onClick={() => cart.bump(l.id, 1)} aria={`Add one ${l.name}`} solid><Plus size={14} /></IconBtn>
+                        </div>
+                        <button onClick={() => cart.remove(l.id)} aria-label={`Delete ${l.name}`}
+                          className="w-7 h-7 grid place-items-center rounded-md text-slate-300 hover:text-rose-500">
+                          <Trash2 size={14} />
+                        </button>
                       </div>
-                    </div>
-                  );
-                })}
+                    ))}
+                  </div>
+                )}
                 <Nav
                   leftLabel="Continue Shopping" leftIcon={ChevronLeft}
                   onLeft={() => navigate("/shop")} canNext={canNext} onNext={() => setStep(2)}
@@ -333,7 +345,7 @@ export default function OrderRequestFlow() {
                 <div className="border-t border-slate-100 pt-3">
                   <div className="text-xs font-semibold tracking-wider text-slate-400 uppercase mb-2">Your Order</div>
                   {lines.map((l) => (
-                    <Row key={l.id} label={`${l.count}× ${l.name}`} value={fmt(l.subtotal)} onRemove={() => setQty((q) => ({ ...q, [l.id]: 0 }))} />
+                    <Row key={l.id} label={`${l.count}× ${l.name}`} value={fmt(l.subtotal)} onRemove={() => cart.remove(l.id)} />
                   ))}
                   <Row label={deliveryObj?.label + (delivery === "courier" && zip ? ` (${zip})` : "")} value={fmt(deliveryFee)} muted />
                 </div>
