@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { Plus, Minus, Trash2, Check, ChevronLeft, ChevronRight, FlaskConical, Truck, PackageCheck, MapPin } from "lucide-react";
-import { getProducts } from "./supabase";
+import { getProducts, submitOrder } from "./supabase";
 
 /*
   Princeton Analytical Labs — Order Request flow (pseudo-cart, no payment)
@@ -47,6 +47,8 @@ export default function OrderRequestFlow() {
   const [zip, setZip] = useState("");
   const [info, setInfo] = useState({ name: "", email: "", phone: "", address: "", notes: "" });
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
   const [catalog, setCatalog] = useState([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState(null);
@@ -67,6 +69,8 @@ export default function OrderRequestFlow() {
     setQty({ ...ENTRY[entry].preload });
     setStep(1);
     setSubmitted(false);
+    setSubmitting(false);
+    setSubmitError(null);
   }, [entry]);
 
   const visible = useMemo(() => {
@@ -103,6 +107,18 @@ export default function OrderRequestFlow() {
     delivery: { method: deliveryObj?.label, zip: delivery === "courier" ? zip : null, fee: deliveryFee },
     estimatedTotal: grandTotal,
     submittedAt: new Date().toISOString(),
+  };
+
+  const handleSendOrder = async () => {
+    setSubmitting(true);
+    setSubmitError(null);
+    const { data, error } = await submitOrder(payload);
+    if (error || data?.ok === false) {
+      setSubmitError("Something went wrong sending your request — please try again.");
+      setSubmitting(false);
+      return;
+    }
+    setSubmitted(true);
   };
 
   const groups = useMemo(
@@ -333,9 +349,12 @@ export default function OrderRequestFlow() {
                   <span className="text-sm text-slate-500">{itemCount} item{itemCount !== 1 ? "s" : ""} + delivery</span>
                   <span className="text-2xl font-bold tabular-nums" style={{ color: NAVY }}>{fmt(grandTotal)}</span>
                 </div>
-                <button onClick={() => setSubmitted(true)}
-                  className="mt-4 w-full rounded-lg text-white py-3 font-semibold transition-opacity hover:opacity-90" style={{ background: CYAN }}>
-                  Send Order Request
+                {submitError && (
+                  <p className="text-sm text-rose-500 mt-3 text-center">{submitError}</p>
+                )}
+                <button onClick={handleSendOrder} disabled={submitting}
+                  className="mt-4 w-full rounded-lg text-white py-3 font-semibold transition-opacity hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed" style={{ background: CYAN }}>
+                  {submitting ? "Sending…" : "Send Order Request"}
                 </button>
                 <p className="text-xs text-slate-400 mt-2 text-center">Estimate only. We'll confirm your order before processing payment.</p>
                 <button onClick={() => setStep(3)} className="mt-3 text-sm text-slate-500 flex items-center gap-1 mx-auto">
