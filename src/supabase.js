@@ -9,7 +9,7 @@ export const supabase = createClient(
 export async function getProducts() {
   const { data, error } = await supabase
     .from('products')
-    .select('id, slug, name, price, blurb, kind')
+    .select('id, slug, name, price, blurb, kind, image_url')
     .eq('active', true)
     .order('sort_order')
 
@@ -22,6 +22,7 @@ export async function getProducts() {
       price: Number(row.price),
       blurb: row.blurb,
       group: row.kind === 'package' ? 'Packages' : 'Individual Tests',
+      image_url: row.image_url,
     })),
     error: null,
   }
