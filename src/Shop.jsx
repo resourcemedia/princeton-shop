@@ -100,9 +100,9 @@ function ProductGrid({ loading, error, products, onOrder }) {
       {products.map((p) => (
         <div key={p.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden flex flex-col">
           {p.image_url ? (
-            <img src={p.image_url} alt={p.name} className="w-full h-40 object-contain bg-white" />
+            <img src={p.image_url} alt={p.name} className="w-full aspect-square object-contain bg-white" />
           ) : (
-            <div className="w-full h-40 grid place-items-center bg-slate-50 text-slate-300">
+            <div className="w-full aspect-square grid place-items-center bg-slate-50 text-slate-300">
               <ImageOff size={28} />
             </div>
           )}
