@@ -126,6 +126,11 @@ Deno.serve(async (req: Request) => {
     }
 
     try {
+      const recipients = (Deno.env.get("ORDER_NOTIFY_EMAIL") ?? "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
       const emailRes = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
@@ -134,7 +139,7 @@ Deno.serve(async (req: Request) => {
         },
         body: JSON.stringify({
           from: "Princeton Analytical Labs <orders@princetonanalytical.com>",
-          to: Deno.env.get("ORDER_NOTIFY_EMAIL"),
+          to: recipients,
           reply_to: customer.email,
           subject: `New order request — ${customer.name} ($${Number(estimatedTotal).toFixed(2)})`,
           html: renderEmailHtml({ source, customer, items, delivery, estimatedTotal, submittedAt }),
